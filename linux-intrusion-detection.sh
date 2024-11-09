@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Configurations
-LOG_FILE="./suspicious.log"  # Log file will be created in the current working directory
+LOG_FILE="/var/log/*.log"  # Log file will be created in the current working directory
 PROCESSES_TO_MONITOR=("rootkit" "rkhunter" "ld.so" "metasploit" "moria" "cowrie" "empire" "xmr-stak" "minerd" "cpuminer" "ethminer" \
 "nc" "ncat" "socat" "telnetd" "sshd" "backdoor.sh" "nmap" "hydra" "aircrack-ng" "ettercap" "tcpdump" "wireshark" \
-"bind" "dnsmasq" "snmpd" "apache2" "nginx" "cron" "atd" "init" "systemd" "systemctl")  # List of suspicious processes
+"bind" "dnsmasq" "snmpd" "apache2" "nginx" "cron" "atd" "init" "systemd" "systemctl" "kismet" "kali" "evil" "remote")  # List of suspicious processes
 CRITICAL_FILES=("/etc/passwd" "/etc/shadow" "/etc/ssh/sshd_config")  # Files to monitor for changes
 SUSPICIOUS_IPS=("1.0.1.0/24" "220.181.0.0/16" "61.0.0.0/8" "5.255.255.0/24" "213.87.0.0/16" "95.213.0.0/16" \
 "175.45.176.0/22" "200.200.0.0/16" "177.70.0.0/16" "201.20.0.0/16" "188.72.0.0/16" "194.44.0.0/16" \
@@ -148,6 +148,38 @@ check_suspicious_software() {
     fi
 }
 
+# Function to check for malicious cron jobs
+check_cron_jobs() {
+    echo "Checking for suspicious cron jobs..." >> $SUSPICIOUS_LOG
+    if crontab -l | grep -E "wget|curl|bash|python|perl|nc|ncat"; then
+        echo "$(date) - ALERT: Malicious cron jobs detected!" >> $SUSPICIOUS_LOG
+    else
+        echo "$(date) - No suspicious cron jobs found." >> $SUSPICIOUS_LOG
+    fi
+}
+
+# Function to check for unauthorized users or changes in sudoers
+check_sudoers_and_users() {
+    echo "Checking for unauthorized users and sudoers modifications..." >> $SUSPICIOUS_LOG
+    if ! grep -q 'allowed_user' /etc/sudoers; then
+        echo "$(date) - ALERT: Unauthorized user found in sudoers!" >> $SUSPICIOUS_LOG
+    fi
+
+    if getent passwd | grep -E "root|admin|user"; then
+        echo "$(date) - ALERT: Suspicious user accounts detected!" >> $SUSPICIOUS_LOG
+    fi
+}
+
+# Function to check for web shells
+check_web_shells() {
+    echo "Checking for web shells in web directories..." >> $SUSPICIOUS_LOG
+    if find /var/www -type f -iname '*.php' -exec grep -l "eval(" {} \; | grep -q .; then
+        echo "$(date) - ALERT: Web shell detected in web directory!" >> $SUSPICIOUS_LOG
+    else
+        echo "$(date) - No web shells found in web directories." >> $SUSPICIOUS_LOG
+    fi
+}
+
 # Create the log file if it does not exist
 if [[ ! -f $SUSPICIOUS_LOG ]]; then
     touch $SUSPICIOUS_LOG
@@ -161,6 +193,9 @@ check_network_activity &
 check_file_integrity &
 check_suspicious_files &
 check_suspicious_software &
+check_cron_jobs &
+check_sudoers_and_users &
+check_web_shells &
 
 # Wait for all background processes to complete
 wait
